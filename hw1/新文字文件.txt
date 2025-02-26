@@ -1,0 +1,69 @@
+import cv2
+import numpy as np
+
+alpha = 0.8  # 設置 alpha 值
+threshold = 30  # 閾值
+cap = cv2.VideoCapture(0)
+
+# 載入虛擬場景圖像
+virtual_scene = cv2.imread('virtual_scene.jpg')  # 替換為您的虛擬場景圖像的路徑
+
+# 檢查攝像頭是否正確打開
+if not cap.isOpened():
+    raise IOError("Cannot open webcam")
+
+# 調整虛擬場景圖像的大小以匹配視訊幀
+virtual_scene = cv2.resize(virtual_scene, (640, 480))  # 根據視訊幀的大小進行調整
+
+# 初始化自適應背景圖像
+adaptive_background = None
+
+while True:
+    # 讀取當前視訊幀
+    ret, frame = cap.read()
+
+    # 如果無法讀取視訊幀，則退出循環
+    if not ret:
+        break
+
+    # 將視訊幀縮放為一半大小以減少計算量
+    frame = cv2.resize(frame, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+
+    # 如果自適應背景圖像為空，則將當前幀設置為初始背景圖像
+    if adaptive_background is None:
+        adaptive_background = frame.astype(float)
+    else:
+        # 更新自適應背景圖像
+        adaptive_background = alpha * adaptive_background + (1 - alpha) * frame
+
+        # 執行自適應背景減法，計算前景遮罩
+        foreground_mask = cv2.absdiff(frame, adaptive_background.astype(np.uint8))
+
+        # 執行前景檢測
+        foreground_detection = np.where(foreground_mask > threshold, frame, 0)
+
+        # 調整虛擬場景圖像的大小以匹配前景檢測結果的大小
+        virtual_scene_resized = cv2.resize(virtual_scene, (foreground_detection.shape[1], foreground_detection.shape[0]))
+
+        # 合成圖像：保留前景，替換背景
+        synthesized_image = np.where(foreground_detection > 0, foreground_detection, virtual_scene_resized)
+
+        # 顯示自適應背景圖像
+        cv2.imshow('Adaptive Background Image', adaptive_background.astype(np.uint8))
+
+        # 顯示自適應背景減法結果
+        cv2.imshow('Adaptive Background Subtraction', foreground_mask)
+
+        # 顯示前景檢測結果
+        cv2.imshow('Foreground Detection', foreground_detection)
+
+        # 顯示合成圖像
+        cv2.imshow('Synthesized Image', synthesized_image)
+
+    # 按 'q' 鍵退出循環
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# 釋放資源並關閉視窗
+cap.release()
+cv2.destroyAllWindows()
